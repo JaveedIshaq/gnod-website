@@ -961,6 +961,9 @@ hr.style-one {
   padding-top: 229px;
   padding-bottom: 275px;
   position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 600px;
 }
 
 .banner-one .owl-carousel .owl-item img {
@@ -1042,10 +1045,26 @@ hr.style-one {
 
 .banner-one__moc {
   position: absolute;
-  bottom: -40px;
+  top: 40%;
   right: 0;
-  -webkit-animation-duration: 4s;
-          animation-duration: 4s;
+  transform: translateY(-50%);
+  width: 100%;
+  max-width: 500px;
+  height: auto;
+  z-index: 2;
+  display: block;
+}
+
+@media (max-width: 1200px) {
+  .banner-one__moc {
+    max-width: 350px;
+  }
+}
+
+@media (max-width: 991px) {
+  .banner-one__moc {
+    display: none !important;
+  }
 }
 
 .banner-one__btn-white-bg {
@@ -1054,7 +1073,7 @@ hr.style-one {
 }
 
 .banner-one__slide-2 .banner-one__moc {
-  bottom: 0;
+  bottom: 10;
 }
 
 .banner-one__btn-group .banner-one__btn + .banner-one__btn {
