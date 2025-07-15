@@ -214,42 +214,51 @@
           </div>
           <!-- /.block-title -->
           <form
+            id="contactForm"
             action="send-email.php"
             class="contact-form-vaidated contact-one__form row"
+            method="POST"
           >
             <div class="col-lg-6">
-              <input type="text" placeholder="Your name" name="name" />
+              <input type="text" placeholder="Your name" name="name" required />
             </div>
             <!-- /.col-lg-6 -->
             <div class="col-lg-6">
-              <input type="text" placeholder="Your email" name="email" />
+              <input type="email" placeholder="Your email" name="email" required />
             </div>
             <!-- /.col-lg-6 -->
             <div class="col-lg-6">
-              <input type="text" placeholder="Phone" name="phone" />
+              <input type="tel" placeholder="Phone" name="phone" />
             </div>
             <!-- /.col-lg-6 -->
             <div class="col-lg-6">
-              <select name="discussion" class="selectpicker">
-                <option value="">Discuss About</option>
-                <option value="">Discuss About</option>
-                <option value="">Discuss About</option>
-                <option value="">Discuss About</option></select
+              <select name="discussion" class="selectpicker" required>
+                <option value="">Select a Topic</option>
+                <option value="web-development">Web Development</option>
+                <option value="mobile-apps">Mobile Applications</option>
+                <option value="custom-software">Custom Software</option>
+                <option value="consultation">IT Consultation</option>
+                <option value="project-quote">Project Quote</option>
+                <option value="support">Technical Support</option>
+                <option value="other">Other</option></select
               ><!-- /#.selectpicker -->
             </div>
             <!-- /.col-lg-6 -->
             <div class="col-lg-12">
-              <input type="text" name="subject" placeholder="Subject" />
+              <input type="text" name="subject" placeholder="Subject" required />
             </div>
             <!-- /.col-lg-6 -->
             <div class="col-lg-12">
-              <textarea name="message" placeholder="Your Message"></textarea>
+              <textarea name="message" placeholder="Your Message" required></textarea>
             </div>
             <!-- /.col-lg-12 -->
             <div class="col-lg-12 text-center">
-              <button type="submit" class="thm-btn">Send Message</button>
+              <button type="submit" class="thm-btn" id="submitBtn">Send Message</button>
             </div>
             <!-- /.col-lg-12 -->
+            <div class="col-lg-12 text-center" id="formMessage" style="display: none; margin-top: 20px;">
+              <div class="alert" id="alertMessage"></div>
+            </div>
           </form>
         </div>
         <!-- /.container -->
@@ -439,5 +448,77 @@
     <script src="js/waypoints.min.js"></script>
     <script src="js/vegas.min.js"></script>
     <script src="js/theme.js"></script>
+    
+    <!-- Contact Form Handler -->
+    <script>
+    $(document).ready(function() {
+        $('#contactForm').on('submit', function(e) {
+            e.preventDefault();
+            
+            // Get form data
+            var formData = new FormData(this);
+            
+            // Show loading state
+            var submitBtn = $('#submitBtn');
+            var originalText = submitBtn.text();
+            submitBtn.text('Sending...').prop('disabled', true);
+            
+            // Hide any previous messages
+            $('#formMessage').hide();
+            
+            // Send AJAX request
+            $.ajax({
+                url: 'send-email.php',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                dataType: 'json',
+                success: function(response) {
+                    var alertClass = response.success ? 'alert-success' : 'alert-danger';
+                    var message = response.message;
+                    
+                    $('#alertMessage')
+                        .removeClass('alert-success alert-danger')
+                        .addClass(alertClass)
+                        .html(message);
+                    
+                    $('#formMessage').show();
+                    
+                    // If successful, reset form
+                    if (response.success) {
+                        $('#contactForm')[0].reset();
+                        // Reset Bootstrap Select if it exists
+                        if ($.fn.selectpicker) {
+                            $('.selectpicker').selectpicker('refresh');
+                        }
+                    }
+                },
+                error: function(xhr, status, error) {
+                    $('#alertMessage')
+                        .removeClass('alert-success alert-danger')
+                        .addClass('alert-danger')
+                        .html('An error occurred while sending your message. Please try again or contact us directly.');
+                    
+                    $('#formMessage').show();
+                },
+                complete: function() {
+                    // Reset button state
+                    submitBtn.text(originalText).prop('disabled', false);
+                    
+                    // Scroll to message
+                    $('html, body').animate({
+                        scrollTop: $('#formMessage').offset().top - 100
+                    }, 500);
+                }
+            });
+        });
+        
+        // Auto-hide success messages after 5 seconds
+        $(document).on('click', '.alert-success', function() {
+            $(this).parent().hide();
+        });
+    });
+    </script>
   </body>
 </html>
