@@ -1,0 +1,13 @@
+{
+    "name": "gnod-tech/website",
+    "description": "GNOD Technologies Website",
+    "type": "project",
+    "require": {
+        "phpmailer/phpmailer": "^6.8"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    }
+}

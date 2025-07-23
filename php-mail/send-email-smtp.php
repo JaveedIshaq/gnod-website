@@ -1,13 +1,34 @@
 <?php
-// Contact Form Email Handler for GNOD Technologies
+// Contact Form Email Handler for GNOD Technologies - SMTP Version
+// Requires PHPMailer library
+
 // Set error reporting for debugging (remove in production)
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// Configuration
-$to_email = "info@gnod-tech.co.za"; // Change this to your email
-$from_email = "noreply@gnod-tech.co.za"; // Change this to your domain
-$from_name = "GNOD Technologies Contact Form";
+// Include PHPMailer (you'll need to install this)
+// Option 1: Using Composer (recommended)
+// require 'vendor/autoload.php';
+
+// Option 2: Manual include (if you download PHPMailer manually)
+// require 'PHPMailer/src/Exception.php';
+// require 'PHPMailer/src/PHPMailer.php';
+// require 'PHPMailer/src/SMTP.php';
+
+// For now, we'll use the built-in mail() function but with better configuration
+// In production, uncomment the PHPMailer includes above
+
+// SMTP Configuration
+$smtp_config = array(
+    'host' => 'smtp.gmail.com', // Change to your SMTP server
+    'port' => 587, // Common ports: 587 (TLS), 465 (SSL), 25 (unencrypted)
+    'username' => 'your-email@gmail.com', // Your email
+    'password' => 'your-app-password', // Your email password or app password
+    'encryption' => 'tls', // 'tls', 'ssl', or '' for no encryption
+    'from_email' => 'noreply@gnod-tech.co.za', // Your domain email
+    'from_name' => 'GNOD Technologies Contact Form',
+    'to_email' => 'info@gnod-tech.co.za' // Where to receive contact form emails
+);
 
 // Initialize response array
 $response = array(
@@ -70,9 +91,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // If no validation errors, proceed with sending email
     if (empty($errors)) {
         
-        // Prepare email content
-        $email_subject = "New Contact Form Submission: " . $subject;
-        
         // Create discussion topic mapping
         $discussion_topics = array(
             'web-development' => 'Web Development',
@@ -85,6 +103,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         
         $discussion_display = isset($discussion_topics[$discussion]) ? $discussion_topics[$discussion] : $discussion;
+        
+        // Email content
+        $email_subject = "New Contact Form Submission: " . $subject;
         
         // Email body
         $email_body = "
@@ -129,24 +150,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </html>
         ";
         
-        // Email headers
-        $headers = array();
-        $headers[] = "MIME-Version: 1.0";
-        $headers[] = "Content-Type: text/html; charset=UTF-8";
-        $headers[] = "From: {$from_name} <{$from_email}>";
-        $headers[] = "Reply-To: {$name} <{$email}>";
-        $headers[] = "X-Mailer: PHP/" . phpversion();
-        $headers[] = "X-Priority: 1";
-        $headers[] = "X-MSMail-Priority: High";
+        // Try to send email using SMTP (if PHPMailer is available)
+        $mail_sent = false;
         
-        // Send email
-        $mail_sent = mail($to_email, $email_subject, $email_body, implode("\r\n", $headers));
+        // Check if PHPMailer is available
+        if (class_exists('PHPMailer\PHPMailer\PHPMailer')) {
+            $mail_sent = sendEmailWithPHPMailer($smtp_config, $email_subject, $email_body, $name, $email);
+        } else {
+            // Fallback to improved mail() function
+            $mail_sent = sendEmailWithMail($smtp_config, $email_subject, $email_body, $name, $email);
+        }
         
         if ($mail_sent) {
             $response['success'] = true;
             $response['message'] = "Thank you for your message! We have received your inquiry and will get back to you soon.";
             
-            // Optional: Send confirmation email to user
+            // Send confirmation email to user
             $user_subject = "Thank you for contacting GNOD Technologies";
             $user_body = "
             <html>
@@ -168,7 +187,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <p><strong>Submitted:</strong> " . date('F j, Y \a\t g:i A') . "</p>
                     </div>
                     
-                    <p>In the meantime, if you have any urgent questions, please don't hesitate to call us at <strong>+27 79160 7483</strong>.</p>
+                    <p>In the meantime, if you have any urgent questions, please don't hesitate to call us at <strong>+27 12 663 3699</strong>.</p>
                     
                     <p>Best regards,<br>
                     The GNOD Technologies Team</p>
@@ -177,20 +196,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <p style='text-align: center; color: #666; font-size: 12px;'>
                         GNOD Technologies<br>
                         59 Blinkblaar, Zwartkop, Centurion, 0157, South Africa<br>
-                        Phone: +27 79160 7483 | Email: info@gnod-tech.co.za
+                        Phone: +27 12 663 3699 | Email: info@gnod-tech.co.za
                     </p>
                 </div>
             </body>
             </html>
             ";
             
-            $user_headers = array();
-            $user_headers[] = "MIME-Version: 1.0";
-            $user_headers[] = "Content-Type: text/html; charset=UTF-8";
-            $user_headers[] = "From: {$from_name} <{$from_email}>";
-            $user_headers[] = "X-Mailer: PHP/" . phpversion();
-            
-            mail($email, $user_subject, $user_body, implode("\r\n", $user_headers));
+            // Send confirmation email
+            if (class_exists('PHPMailer\PHPMailer\PHPMailer')) {
+                sendEmailWithPHPMailer($smtp_config, $user_subject, $user_body, $smtp_config['from_name'], $email);
+            } else {
+                sendEmailWithMail($smtp_config, $user_subject, $user_body, $smtp_config['from_name'], $email);
+            }
             
         } else {
             $response['message'] = "Sorry, there was an error sending your message. Please try again later or contact us directly.";
@@ -208,4 +226,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 header('Content-Type: application/json');
 echo json_encode($response);
 exit;
+
+/**
+ * Send email using PHPMailer with SMTP
+ */
+function sendEmailWithPHPMailer($config, $subject, $body, $reply_name, $reply_email) {
+    try {
+        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+        
+        // Server settings
+        $mail->isSMTP();
+        $mail->Host = $config['host'];
+        $mail->SMTPAuth = true;
+        $mail->Username = $config['username'];
+        $mail->Password = $config['password'];
+        $mail->SMTPSecure = $config['encryption'];
+        $mail->Port = $config['port'];
+        
+        // Enable debug output (remove in production)
+        // $mail->SMTPDebug = 2;
+        
+        // Recipients
+        $mail->setFrom($config['from_email'], $config['from_name']);
+        $mail->addAddress($config['to_email']);
+        $mail->addReplyTo($reply_email, $reply_name);
+        
+        // Content
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body = $body;
+        $mail->AltBody = strip_tags($body);
+        
+        $mail->send();
+        return true;
+        
+    } catch (Exception $e) {
+        error_log("PHPMailer Error: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Send email using improved mail() function
+ */
+function sendEmailWithMail($config, $subject, $body, $reply_name, $reply_email) {
+    // Email headers
+    $headers = array();
+    $headers[] = "MIME-Version: 1.0";
+    $headers[] = "Content-Type: text/html; charset=UTF-8";
+    $headers[] = "From: {$config['from_name']} <{$config['from_email']}>";
+    $headers[] = "Reply-To: {$reply_name} <{$reply_email}>";
+    $headers[] = "X-Mailer: PHP/" . phpversion();
+    $headers[] = "X-Priority: 1";
+    $headers[] = "X-MSMail-Priority: High";
+    
+    // Additional headers for better deliverability
+    $headers[] = "Message-ID: <" . time() . "." . md5($reply_email) . "@" . $_SERVER['SERVER_NAME'] . ">";
+    $headers[] = "Date: " . date('r');
+    
+    return mail($config['to_email'], $subject, $body, implode("\r\n", $headers));
+}
 ?> 

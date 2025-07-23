@@ -40,6 +40,9 @@
     <link rel="stylesheet" href="plugins/inchtech-icons/style.css" />
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="css/responsive.css" />
+    
+    <!-- Google reCAPTCHA -->
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
   </head>
 
   <body class="contact-page">
@@ -53,7 +56,7 @@
           </p>
           <!-- /.topbar-one__left-text -->
           <ul class="topbar-one__right-info list-unstyled">
-            <li><i class="fa fa-phone"></i> +27 79160 7483</li>
+            <li><i class="fa fa-phone"></i> +27 12 663 3699</li>
           </ul>
           <!-- /.topbar-one__right-info list-unstyled -->
         </div>
@@ -162,7 +165,7 @@
                   <p class="contact-info-one__label">Phone</p>
                   <!-- /.contact-info-one__label -->
                   <p class="contact-info-one__text">
-                    <a href="tel:+27791607483">+27 79160 7483</a>
+                    <a href="tel:+27126633699">+27 12 663 3699</a>
                   </p>
                   <!-- /.contact-info-one__text -->
                 </div>
@@ -215,7 +218,6 @@
           <!-- /.block-title -->
           <form
             id="contactForm"
-            action="send-email.php"
             class="contact-form-vaidated contact-one__form row"
             method="POST"
           >
@@ -226,6 +228,7 @@
             <div class="col-lg-6">
               <input type="email" placeholder="Your email" name="email" required />
             </div>
+
             <!-- /.col-lg-6 -->
             <div class="col-lg-6">
               <input type="tel" placeholder="Phone" name="phone" />
@@ -240,7 +243,8 @@
                 <option value="consultation">IT Consultation</option>
                 <option value="project-quote">Project Quote</option>
                 <option value="support">Technical Support</option>
-                <option value="other">Other</option></select
+                <option value="other">Other</option>
+              </select
               ><!-- /#.selectpicker -->
             </div>
             <!-- /.col-lg-6 -->
@@ -250,6 +254,11 @@
             <!-- /.col-lg-6 -->
             <div class="col-lg-12">
               <textarea name="message" placeholder="Your Message" required></textarea>
+            </div>
+            <!-- /.col-lg-12 -->
+            <div class="col-lg-12 text-center">
+              <!-- Google reCAPTCHA -->
+              <div class="g-recaptcha" data-sitekey="6Lf8P4wrAAAAAN1EmzldoSaiBET-Dh2UDvf4m154" style="display: inline-block; margin-bottom: 20px;"></div>
             </div>
             <!-- /.col-lg-12 -->
             <div class="col-lg-12 text-center">
@@ -300,7 +309,7 @@
                   </div>
                   <!-- /.block-title -->
                   <p class="cta-two__phone">
-                    <a href="tel:+27791607483">+27 79160 7483</a>
+                    <a href="tel:+27126633699">+27 12 663 3699</a>
                   </p>
                   <!-- /.cta-two__phone -->
                 </div>
@@ -374,7 +383,7 @@
                   </p>
                   <!-- /.footer-widget__text -->
                   <p class="footer-widget__text">
-                    <a href="tel:+27791607483">+27 79160 7483</a>
+                    <a href="tel:+27126633699">+27 12 663 3699</a>
                   </p>
                   <!-- /.footer-widget__text -->
                   <p class="footer-widget__text">
@@ -452,11 +461,33 @@
     <!-- Contact Form Handler -->
     <script>
     $(document).ready(function() {
+        var isSubmitting = false;
+        
         $('#contactForm').on('submit', function(e) {
             e.preventDefault();
             
+            // Prevent double submission
+            if (isSubmitting) {
+                return false;
+            }
+            
+            // Validate reCAPTCHA
+            var recaptchaResponse = grecaptcha.getResponse();
+            if (recaptchaResponse.length === 0) {
+                $('#alertMessage')
+                    .removeClass('alert-success alert-danger')
+                    .addClass('alert-danger')
+                    .html('Please complete the reCAPTCHA verification.');
+                
+                $('#formMessage').show();
+                return false;
+            }
+            
+            isSubmitting = true;
+            
             // Get form data
             var formData = new FormData(this);
+            formData.append('g-recaptcha-response', recaptchaResponse);
             
             // Show loading state
             var submitBtn = $('#submitBtn');
@@ -468,7 +499,7 @@
             
             // Send AJAX request
             $.ajax({
-                url: 'send-email.php',
+                url: 'php-mail/send-email-smtp-production.php',
                 type: 'POST',
                 data: formData,
                 processData: false,
@@ -492,6 +523,8 @@
                         if ($.fn.selectpicker) {
                             $('.selectpicker').selectpicker('refresh');
                         }
+                        // Reset reCAPTCHA
+                        grecaptcha.reset();
                     }
                 },
                 error: function(xhr, status, error) {
@@ -503,6 +536,9 @@
                     $('#formMessage').show();
                 },
                 complete: function() {
+                    // Reset submission flag
+                    isSubmitting = false;
+                    
                     // Reset button state
                     submitBtn.text(originalText).prop('disabled', false);
                     

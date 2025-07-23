@@ -52,6 +52,17 @@ $response = array(
 // Check if form was submitted
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
+    // Prevent duplicate submissions using session
+    session_start();
+    $form_token = md5(implode('|', $_POST) . $_SERVER['REMOTE_ADDR'] . date('Y-m-d H:i'));
+    
+    if (isset($_SESSION['last_form_token']) && $_SESSION['last_form_token'] === $form_token) {
+        http_response_code(429);
+        die(json_encode(['success' => false, 'message' => 'Duplicate submission detected. Please wait before submitting again.']));
+    }
+    
+    $_SESSION['last_form_token'] = $form_token;
+    
     // Rate limiting (prevent spam)
     $ip = $_SERVER['REMOTE_ADDR'];
     $rate_limit_file = 'rate_limit_' . md5($ip) . '.txt';
@@ -82,9 +93,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $discussion = isset($_POST['discussion']) ? trim(htmlspecialchars($_POST['discussion'])) : '';
     $subject = isset($_POST['subject']) ? trim(htmlspecialchars($_POST['subject'])) : '';
     $message = isset($_POST['message']) ? trim(htmlspecialchars($_POST['message'])) : '';
+    $recaptcha_response = isset($_POST['g-recaptcha-response']) ? $_POST['g-recaptcha-response'] : '';
     
     // Validation
     $errors = array();
+    
+    // reCAPTCHA validation
+    if (empty($recaptcha_response)) {
+        $errors[] = "Please complete the reCAPTCHA verification";
+    } else {
+        // Verify reCAPTCHA with Google
+        $recaptcha_verify = verifyRecaptcha($config['recaptcha']['secret_key'], $recaptcha_response, $_SERVER['REMOTE_ADDR']);
+        if (!$recaptcha_verify) {
+            $errors[] = "reCAPTCHA verification failed. Please try again";
+        }
+    }
     
     // Name validation
     if (empty($name)) {
@@ -177,13 +200,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user_subject = "Thank you for contacting GNOD Technologies";
             $user_body = createConfirmationEmail($name, $subject, $discussion_display);
             
-            sendEmailWithSMTP($config, $user_subject, $user_body, $config['from']['name'], $email);
+            sendConfirmationEmailToUser($config, $user_subject, $user_body, $email);
             
             // Log successful submission
             logSubmission($name, $email, $subject, $discussion, true);
             
         } else {
-            $response['message'] = "Sorry, there was an error sending your message. Please try again later or contact us directly at +27 79160 7483.";
+            $response['message'] = "Sorry, there was an error sending your message. Please try again later or contact us directly at +27 12 663 3699.";
             logSubmission($name, $email, $subject, $discussion, false);
         }
         
@@ -241,6 +264,50 @@ function sendEmailWithSMTP($config, $subject, $body, $reply_name, $reply_email) 
         
     } catch (Exception $e) {
         error_log("PHPMailer Error: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Send confirmation email to user
+ */
+function sendConfirmationEmailToUser($config, $subject, $body, $user_email) {
+    try {
+        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+        
+        // Server settings
+        $mail->isSMTP();
+        $mail->Host = $config['smtp']['host'];
+        $mail->SMTPAuth = true;
+        $mail->Username = $config['smtp']['username'];
+        $mail->Password = $config['smtp']['password'];
+        $mail->SMTPSecure = $config['smtp']['encryption'];
+        $mail->Port = $config['smtp']['port'];
+        
+        // Timeout settings
+        $mail->Timeout = 30;
+        $mail->SMTPKeepAlive = false;
+        
+        // Recipients - send TO the user, FROM company
+        $mail->setFrom($config['from']['email'], $config['from']['name']);
+        $mail->addAddress($user_email);
+        $mail->addReplyTo($config['to']['email'], 'GNOD Technologies');
+        
+        // Content
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body = $body;
+        $mail->AltBody = strip_tags($body);
+        
+        // Additional headers for better deliverability
+        $mail->addCustomHeader('X-Mailer', 'GNOD Technologies Contact Form');
+        $mail->addCustomHeader('X-Priority', '3');
+        
+        $mail->send();
+        return true;
+        
+    } catch (Exception $e) {
+        error_log("PHPMailer Confirmation Error: " . $e->getMessage());
         return false;
     }
 }
@@ -316,7 +383,7 @@ function createConfirmationEmail($name, $subject, $discussion_display) {
                 <p><strong>Submitted:</strong> " . date('F j, Y \a\t g:i A') . "</p>
             </div>
             
-            <p>In the meantime, if you have any urgent questions, please don't hesitate to call us at <strong>+27 79160 7483</strong>.</p>
+            <p>In the meantime, if you have any urgent questions, please don't hesitate to call us at <strong>+27 12 663 3699</strong>.</p>
             
             <p>Best regards,<br>
             The GNOD Technologies Team</p>
@@ -325,7 +392,7 @@ function createConfirmationEmail($name, $subject, $discussion_display) {
             <p style='text-align: center; color: #666; font-size: 12px;'>
                 GNOD Technologies<br>
                 59 Blinkblaar, Zwartkop, Centurion, 0157, South Africa<br>
-                Phone: +27 79160 7483 | Email: info@gnod-tech.co.za
+                Phone: +27 12 663 3699 | Email: info@gnod-tech.co.za
             </p>
         </div>
     </body>
@@ -362,5 +429,50 @@ function logSubmission($name, $email, $subject, $discussion, $success) {
     
     $logs[] = $log_entry;
     file_put_contents($log_file, json_encode($logs, JSON_PRETTY_PRINT));
+}
+
+/**
+ * Verify reCAPTCHA response with Google
+ */
+function verifyRecaptcha($secret_key, $response, $remote_ip) {
+    $verify_url = 'https://www.google.com/recaptcha/api/siteverify';
+    
+    $data = array(
+        'secret' => $secret_key,
+        'response' => $response,
+        'remoteip' => $remote_ip
+    );
+    
+    $options = array(
+        'http' => array(
+            'header' => "Content-type: application/x-www-form-urlencoded\r\n",
+            'method' => 'POST',
+            'content' => http_build_query($data)
+        )
+    );
+    
+    $context = stream_context_create($options);
+    $result = file_get_contents($verify_url, false, $context);
+    
+    if ($result === false) {
+        error_log("reCAPTCHA verification failed: Unable to connect to Google");
+        return false;
+    }
+    
+    $response_data = json_decode($result, true);
+    
+    if ($response_data === null) {
+        error_log("reCAPTCHA verification failed: Invalid JSON response");
+        return false;
+    }
+    
+    // Check if verification was successful
+    if (isset($response_data['success']) && $response_data['success'] === true) {
+        return true;
+    } else {
+        $error_codes = isset($response_data['error-codes']) ? implode(', ', $response_data['error-codes']) : 'Unknown error';
+        error_log("reCAPTCHA verification failed: " . $error_codes);
+        return false;
+    }
 }
 ?> 
